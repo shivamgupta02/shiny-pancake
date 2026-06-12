@@ -14,6 +14,7 @@ class SmsBloc extends Bloc<SmsEvent, SmsState> {
   SmsBloc() : super(const SmsInitial()) {
     on<RequestPermission>(_onRequestPermission);
     on<ScanMessages>(_onScanMessages);
+    on<ScanPendingMessages>(_onScanPendingMessages);
     on<ConfirmExpense>(_onConfirmExpense);
     on<DismissExpense>(_onDismissExpense);
     on<CorrectAndConfirmExpense>(_onCorrectAndConfirmExpense);
@@ -62,6 +63,17 @@ class SmsBloc extends Bloc<SmsEvent, SmsState> {
       _dismissedCount = 0;
 
       final messages = await _smsReaderService.readMessages(event.days);
+
+      // Load existing SMS-sourced expenses to deduplicate
+      final existingExpenses = await _expenseRepository.getAll();
+      final existingSet = <String>{};
+      for (final e in existingExpenses) {
+        if (e.source == ExpenseSource.sms) {
+          // Key: amount + date (day precision) to detect duplicates
+          existingSet.add('${e.amount}_${e.date.year}_${e.date.month}_${e.date.day}');
+        }
+      }
+
       final detectedExpenses = <DetectedExpense>[];
 
       for (final message in messages) {
@@ -83,6 +95,10 @@ class SmsBloc extends Bloc<SmsEvent, SmsState> {
         );
 
         if (detected != null && detected.confidence >= 0.4) {
+          // Skip if already added as expense
+          final key = '${detected.amount}_${detected.date.year}_${detected.date.month}_${detected.date.day}';
+          if (existingSet.contains(key)) continue;
+
           // If rule was used successfully, increment success count
           if (rule != null && detected.confidence >= 0.9) {
             await _smsRuleService.incrementSuccess(sender);
@@ -92,6 +108,59 @@ class SmsBloc extends Bloc<SmsEvent, SmsState> {
       }
 
       // Sort by date descending (most recent first)
+      detectedExpenses.sort((a, b) => b.smsDate.compareTo(a.smsDate));
+
+      emit(SmsLoaded(
+        detectedExpenses: detectedExpenses,
+        confirmedCount: _confirmedCount,
+        dismissedCount: _dismissedCount,
+      ));
+    } catch (e) {
+      emit(SmsError(message: e.toString()));
+    }
+  }
+
+  Future<void> _onScanPendingMessages(
+    ScanPendingMessages event,
+    Emitter<SmsState> emit,
+  ) async {
+    try {
+      emit(const SmsScanning());
+
+      _confirmedCount = 0;
+      _dismissedCount = 0;
+
+      // Read pending messages from BroadcastReceiver
+      final pending = await _smsReaderService.getPendingMessages();
+      await _smsReaderService.clearPendingMessages();
+
+      final detectedExpenses = <DetectedExpense>[];
+
+      for (final message in pending) {
+        final body = message['body'] as String? ?? '';
+        final dateMillis = message['date'] as int?;
+        final sender = message['sender'] as String? ?? '';
+        final smsDate = dateMillis != null
+            ? DateTime.fromMillisecondsSinceEpoch(dateMillis)
+            : DateTime.now();
+
+        final rule = await _smsRuleService.getRuleForSender(sender);
+
+        final detected = _smsParsingService.parseMessage(
+          body,
+          smsDate: smsDate,
+          rule: rule,
+          sender: sender,
+        );
+
+        if (detected != null && detected.confidence >= 0.4) {
+          if (rule != null && detected.confidence >= 0.9) {
+            await _smsRuleService.incrementSuccess(sender);
+          }
+          detectedExpenses.add(detected);
+        }
+      }
+
       detectedExpenses.sort((a, b) => b.smsDate.compareTo(a.smsDate));
 
       emit(SmsLoaded(

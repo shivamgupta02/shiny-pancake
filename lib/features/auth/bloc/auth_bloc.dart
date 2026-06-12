@@ -89,7 +89,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         return;
       }
 
-      final canAuthenticate = await _localAuth.canCheckBiometrics;
+      final canAuthenticate = await _localAuth.canCheckBiometrics ||
+          await _localAuth.isDeviceSupported();
       if (!canAuthenticate) {
         emit(const AuthLocked());
         return;
@@ -99,7 +100,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         localizedReason: 'Authenticate to access Expense Calculator',
         options: const AuthenticationOptions(
           stickyAuth: true,
-          biometricOnly: true, // ignore: deprecated_member_use
+          biometricOnly: false,
         ),
       );
 
@@ -110,7 +111,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       } else {
         emit(const AuthLocked());
       }
-    } catch (_) {
+    } catch (e) {
+      // Biometric failed — stay on PIN screen
       emit(const AuthLocked());
     }
   }

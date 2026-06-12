@@ -22,6 +22,10 @@ class ScanMessages extends SmsEvent {
   List<Object?> get props => [days];
 }
 
+class ScanPendingMessages extends SmsEvent {
+  const ScanPendingMessages();
+}
+
 class ConfirmExpense extends SmsEvent {
   const ConfirmExpense({
     required this.detectedExpense,

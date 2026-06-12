@@ -12,12 +12,20 @@ import 'learned_rules_screen.dart';
 import 'sms_correction_screen.dart';
 
 class SmsScanScreen extends StatelessWidget {
-  const SmsScanScreen({super.key});
+  const SmsScanScreen({super.key, this.scanPending = false});
+
+  final bool scanPending;
 
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (_) => SmsBloc(),
+      create: (_) {
+        final bloc = SmsBloc();
+        if (scanPending) {
+          bloc.add(const ScanPendingMessages());
+        }
+        return bloc;
+      },
       child: const _SmsScanView(),
     );
   }
@@ -96,6 +104,14 @@ class _SmsScanView extends StatelessWidget {
             ),
             const SizedBox(height: 32),
             FilledButton.icon(
+              onPressed: () => context
+                  .read<SmsBloc>()
+                  .add(const ScanMessages(days: 1)),
+              icon: const Icon(Icons.today),
+              label: const Text('Scan Today'),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
               onPressed: () => context
                   .read<SmsBloc>()
                   .add(const ScanMessages(days: 7)),

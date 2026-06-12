@@ -167,19 +167,13 @@ class _AuthGateState extends State<_AuthGate> with WidgetsBindingObserver {
     int detected = 0;
     for (final msg in pending) {
       final body = msg['body'] as String? ?? '';
-      final dateMillis = msg['date'] as int?;
-      final smsDate = dateMillis != null
-          ? DateTime.fromMillisecondsSinceEpoch(dateMillis)
-          : DateTime.now();
-
-      final result = smsParser.parseMessage(body, smsDate: smsDate);
+      final result = smsParser.parseMessage(body);
       if (result != null && result.confidence >= 0.4) {
         detected++;
       }
     }
 
-    await smsReader.clearPendingMessages();
-
+    // Don't clear here — the ScanPendingMessages event will clear them
     if (detected > 0 && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -189,7 +183,7 @@ class _AuthGateState extends State<_AuthGate> with WidgetsBindingObserver {
             onPressed: () {
               Navigator.of(context).push(
                 MaterialPageRoute(
-                  builder: (_) => const SmsScanScreen(),
+                  builder: (_) => const SmsScanScreen(scanPending: true),
                 ),
               );
             },

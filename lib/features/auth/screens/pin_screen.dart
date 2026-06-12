@@ -46,7 +46,11 @@ class _PinScreenState extends State<PinScreen> {
         _biometricEnabled = settings.biometricEnabled;
       });
       if (_biometricEnabled) {
-        context.read<AuthBloc>().add(const AuthenticateBiometric());
+        // Delay slightly to ensure BLoC is ready
+        await Future.delayed(const Duration(milliseconds: 300));
+        if (mounted) {
+          context.read<AuthBloc>().add(const AuthenticateBiometric());
+        }
       }
     }
   }
