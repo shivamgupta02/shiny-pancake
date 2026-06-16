@@ -80,14 +80,22 @@ class SmsParsingService {
   bool isTransactionSms(String body) {
     final lower = body.toLowerCase();
 
-    // Check exclusion keywords first
-    for (final keyword in _exclusionKeywords) {
-      if (lower.contains(keyword)) return false;
+    // Check exclusion keywords — but only if there's no debit keyword present
+    // (some messages mention both "debited" and "credited" for transfers)
+    final hasDebitKeyword = _debitKeywords.any((k) => lower.contains(k));
+
+    if (!hasDebitKeyword) {
+      // No debit keyword at all — check exclusions
+      for (final keyword in _exclusionKeywords) {
+        if (lower.contains(keyword)) return false;
+      }
+      return false; // No debit keyword means not a transaction
     }
 
-    // Must contain a debit keyword
-    final hasDebitKeyword = _debitKeywords.any((k) => lower.contains(k));
-    if (!hasDebitKeyword) return false;
+    // Has a debit keyword — check if it's an OTP message (always exclude)
+    if (lower.contains('otp') || lower.contains('one time password')) {
+      return false;
+    }
 
     // Must contain an amount indicator
     final hasAmountIndicator = _amountIndicators.any((k) => lower.contains(k));
